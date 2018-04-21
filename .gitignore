@@ -1,2 +1,6 @@
+.DS_store
 dbconfig.py
-
+NYC_Intersetions.csv
+NewYork.osm
+dbconfig.pyc
+missing.py
