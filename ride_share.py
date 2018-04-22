@@ -4,6 +4,11 @@ from dbconfig import *
 import MySQLdb
 import json
 import sys
+import requests
+import urllib
+import networkx as nx
+
+G = nx.Graph()
 
 """
 TODO: Convert units
@@ -22,7 +27,7 @@ Load data from preprocessed .csv files
 """
 def get_trips(conn):
     cur = conn.cursor()
-    cur.execute("SELECT * FROM trips WHERE stdate='1/25/16'")
+    cur.execute("SELECT * FROM trips WHERE stdate='1/23/16'")
     return cur.fetchall()
 
 """
@@ -62,20 +67,115 @@ def get_pools(all_trips, total_trips, pool_size):
 Perform distance and delay constraint checks for trips a and b
 """
 def check(conn, trip_a, trip_b):
-    # ha_hb = trip_a[9] + trip_b[9]
-    # url_ab = "http://router.project-osrm.org/route/v1/driving/" + trip_a[3] + "," + trip_a[2] + ";" + trip_b[3] + "," + trip_b[2] + "?annotations=distance"
-    # response  = requests.get(url_ab).text
-    # json_response = json.loads(response)
-    #
-    # url_ba = "http://router.project-osrm.org/route/v1/driving/" + trip_b[3] + "," + trip_b[2] + ";" + trip_a[3] + "," + trip_a[2] + "?annotations=distance"
-    # dist_ab =
-    # dist_ba =
-    # ha_ab =
-    # hb_ba =
-    # if ha_hb > ha_ab or ha_hb > hb_ba:
-    #
-    # else:
-    pass
+    social_score =0
+    print "coo"  
+    print trip_a, trip_b
+    
+    if(str(trip_a[3])==str(trip_b[3]) and str(trip_a[2])==str(trip_b[2])):
+        benefit = .5;
+        social_score = calc_social_score(trip_a, trip_b)
+        G.add_edge(trip_a[1], trip_b[1], weight=10000*(benefit*.8 + social_score))
+        return
+
+
+    url_ab = "http://router.project-osrm.org/route/v1/driving/" + str(trip_a[3]) + "," + str(trip_a[2]) + ";" + str(trip_b[3]) + "," + str(trip_b[2]) + "?annotations=distance"
+    response  = requests.get(url_ab).text
+    json_response = json.loads(response)
+    dist_ab = json_response["routes"][0]["distance"] * 0.00062137
+    time_ab = json_response["routes"][0]["duration"] / 60.0
+    speed_ab = dist_ab / time_ab
+
+    url_ba = "http://router.project-osrm.org/route/v1/driving/" + str(trip_b[3]) + "," + str(trip_b[2]) + ";" + str(trip_a[3]) + "," + str(trip_a[2]) + "?annotations=distance"
+    response  = requests.get(url_ab).text
+    json_response = json.loads(response)
+    dist_ba = json_response["routes"][0]["distance"] * 0.00062137
+    time_ba = json_response["routes"][0]["duration"] / 60.0
+    speed_ba = dist_ba / time_ba
+
+    ha_hb = float(trip_a[9]) + float(trip_b[9])
+    ha_ab = float(trip_a[9]) + dist_ab
+    hb_ba = float(trip_b[9]) + dist_ba
+    
+    print("ha-hb {}".format(ha_hb))
+    print("ha-ab {}".format(ha_ab))
+    print("hb-ba {}".format(hb_ba))
+
+
+    cur = conn.cursor()
+    lat = str(trip_a[2])
+    lon = str(trip_a[3])
+    #print trip_a
+    #print trip_b
+    q = "SELECT distance, ttime from delayconstraint where lat = " + lat + " and lon = " + lon
+    print q
+    cur.execute(q)
+    result = cur.fetchall()
+    dist_ha_osrm = float(result[0][0]) * 0.00062137
+    time_ha_osrm = float(result[0][1]) / 60.0
+    speed_ha_osrm = dist_ha_osrm / time_ha_osrm
+    speed_ha_ds = float(trip_a[26])
+
+    lat = str(trip_b[2])
+    lon = str(trip_b[3])
+    q = "SELECT distance, ttime from delayconstraint where lat = " + lat + " and lon = " + lon
+    print q
+    cur.execute(q)
+    result = cur.fetchall()
+    dist_hb_osrm = float(result[0][0]) * 0.00062137
+    time_hb_osrm = float(result[0][1]) / 60.0
+    speed_hb_osrm = dist_hb_osrm / time_hb_osrm
+    speed_hb_ds = float(trip_b[26])
+    print speed_ha_osrm
+    print speed_ha_ds
+
+    speed_max_ab = max(speed_ab, speed_ba)
+    factor = ((speed_ha_ds / speed_ha_osrm) + (speed_hb_ds / speed_hb_osrm)) / 2.0
+
+    print 'factor'
+    print(factor)
+    flag_ab = 0
+    flag_ba = 0
+    benefit_ab = 0
+    benefit_ba = 0
+    
+
+    if ha_hb > ha_ab:
+        drop_time = float(trip_a[25]) + (dist_ab / (factor * speed_max_ab))
+        if drop_time <= float(trip_b[25]) + float(trip_b[14]):
+            flag_ab = 1
+            benefit_ab = (ha_hb - ha_ab)/ha_hb
+
+    print 'flag_ab'
+    print flag_ab
+    print 'benefit_ab'
+    print benefit_ab
+
+    if ha_hb > hb_ba:
+        drop_time = float(trip_b[25]) + (dist_ba / (factor * speed_max_ab))
+        if drop_time <= float(trip_a[25]) + float(trip_a[14]):
+            flag_ba = 1
+            benefit_ba = (ha_hb - hb_ba)/ha_hb
+    print 'flag_ba'
+    print flag_ba
+    print 'benefit_ba'
+    print benefit_ba
+    #if flag_ab == 1 and flag_ba == 1:
+    benefit = max(benefit_ab, benefit_ba)
+    print 'final benefit'
+    print benefit
+    social_score = calc_social_score(trip_a, trip_b);
+    print 'social_score'
+    print social_score
+    G.add_edge(trip_a[1], trip_b[1], weight=10000*(benefit*.8 + social_score))
+    #print 'graph'
+    #print list(G.edges.items())
+    #G.add_edge('100', '200', weight=1+benefit*.8)
+    #elist = [('a', 'b', 5.0), ('b', 'c', 3.0), ('a', 'c', 1.0), ('c', 'd', 7.3)]
+    #G.add_weighted_edges_from(elist)
+    #print list(G.edges.items())
+    #if flag_ab == 1 and flag_ba == 0:
+
+
 
 """
 Calculate the social score for trips a and b
@@ -125,6 +225,26 @@ def main():
     total_trips = len(all_trips)
 
     pools = get_pools(all_trips, total_trips, 5)
+
+    print all_trips[0]
+    
+    pool =0
+
+    for i in range(len(pools[pool])):
+        for j in range(i+1, len(pools[pool])):
+            a = int(pools[pool][i]) - int(all_trips[0][0])
+            b = int(pools[pool][j]) - int(all_trips[0][0])
+            check(conn, all_trips[a], all_trips[b])
+    
+    print 'length of pool'
+    print pools[pool], len(pools[pool])
+    #check(conn, all_trips[0], all_trips[1])
+    print 'graph'
+    print list(G)
+
+    print 'max matching'
+    print len(nx.max_weight_matching(G, maxcardinality=True, weight='weight'))
+
 
     print calc_social_score(all_trips[0], all_trips[1])
 
