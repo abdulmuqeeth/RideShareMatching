@@ -74,7 +74,7 @@ def check(conn, trip_a, trip_b):
     if(str(trip_a[3])==str(trip_b[3]) and str(trip_a[2])==str(trip_b[2])):
         benefit = .5;
         social_score = calc_social_score(trip_a, trip_b)
-        G.add_edge(trip_a[1], trip_b[1], weight=10000*(benefit*.8 + social_score))
+        G.add_edge(trip_a[1], trip_b[1], weight=10000*(benefit*2*.8 + social_score))
         return
 
 
@@ -164,9 +164,10 @@ def check(conn, trip_a, trip_b):
     print 'final benefit'
     print benefit
     social_score = calc_social_score(trip_a, trip_b);
-    print 'social_score'
-    print social_score
-    G.add_edge(trip_a[1], trip_b[1], weight=10000*(benefit*.8 + social_score))
+    #print 'social_score'
+    #print social_score
+    if(benefit !=0.0):
+        G.add_edge(trip_a[1], trip_b[1], weight=10000*(benefit*2*.8) + social_score)
     #print 'graph'
     #print list(G.edges.items())
     #G.add_edge('100', '200', weight=1+benefit*.8)
@@ -240,10 +241,12 @@ def main():
     print pools[pool], len(pools[pool])
     #check(conn, all_trips[0], all_trips[1])
     print 'graph'
-    print list(G)
+    print list(G.edges.items())
 
     print 'max matching'
     print len(nx.max_weight_matching(G, maxcardinality=True, weight='weight'))
+
+    print 'hello'
 
 
     print calc_social_score(all_trips[0], all_trips[1])
