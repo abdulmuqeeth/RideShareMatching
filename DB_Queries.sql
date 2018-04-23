@@ -29,7 +29,9 @@ CREATE TABLE `trips` (
   `lang` varchar(50) DEFAULT NULL,
   `lp` varchar(10) DEFAULT NULL,
   `duration` varchar(7) DEFAULT NULL,
-  `speed` varchar(10) DEFAULT NULL
+  `speed` varchar(10) DEFAULT NULL,
+  `timediff` varchar(20) DEFAULT NULL,
+  `dur` varchar(7) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
 LOAD DATA  LOCAL INFILE  '/Users/abdulmuqeethmohammed/Documents/datasettrip.csv'
