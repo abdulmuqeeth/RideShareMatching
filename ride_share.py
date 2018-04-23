@@ -6,34 +6,31 @@ import json
 import sys
 import requests
 import urllib
+import time
 import networkx as nx
 
-G = nx.Graph()
+# TODO: Convert units
 
-"""
-TODO: Convert units
-"""
-
-"""
-Connect to Database
-"""
 def make_connection():
+    """
+    Connect to Database
+    """
     conn = MySQLdb.connect(host=hostname, user=username, passwd=password, db=database)
 
     return conn
 
-"""
-Load data from preprocessed .csv files
-"""
 def get_trips(conn):
+    """
+    Load data from preprocessed .csv files
+    """
     cur = conn.cursor()
     cur.execute("SELECT * FROM trips WHERE stdate='1/23/16'")
     return cur.fetchall()
 
-"""
-Returns all the trips as a set of 3/5/7 minute pools
-"""
 def get_pools(all_trips, total_trips, pool_size):
+    """
+    Returns all the trips as a set of 3/5/7 minute pools
+    """
     pools_per_day = (24 * 60) / pool_size
     pools_per_hour = 60 / pool_size
     pools = [ [] for i  in range(pools_per_day)]
@@ -50,31 +47,33 @@ def get_pools(all_trips, total_trips, pool_size):
             trip_start_hour = int(all_trips[j][5].split(":")[0])
 
             if prev_hour == trip_start_hour:
-                # if i == 12:
-                #     print prev_hour, "==", trip_start_hour, trip_start_minutes, "<",  pool_start_time + pool_size
                 if trip_start_minutes >= pool_start_time and trip_start_minutes < pool_start_time + pool_size:
                     pools[i].append(all_trips[j][0])
                     trips_pooled += 1
 
-        # break
         pool_start_time += pool_size
         if ((i + 1) % pools_per_hour) == 0:
             prev_hour += 1
 
     return pools
 
-"""
-Perform distance and delay constraint checks for trips a and b
-"""
-def check(conn, trip_a, trip_b):
+
+def check(conn, trip_a, trip_b, G, benefit_G, delay_factor):
+    """
+    Perform distance and delay constraint checks for trips a and b
+    """
+    if int(trip_a[8]) + int(trip_b[8]) > 4:
+        return
     social_score =0
-    print "coo"
-    print trip_a, trip_b
+    # print "coo"
+    # print trip_a, trip_b
 
     if(str(trip_a[3])==str(trip_b[3]) and str(trip_a[2])==str(trip_b[2])):
         benefit = .5;
-        social_score = calc_social_score(trip_a, trip_b)
+        social_score = calc_social_score(trip_a, trip_b)[0]
         G.add_edge(trip_a[0], trip_b[0], weight=10000*(benefit*2*.8 + social_score))
+        benefit_G.add_edge(trip_a[0], trip_b[0], weight=max(trip_a[9], trip_b[9]))
+
         return
 
 
@@ -96,9 +95,9 @@ def check(conn, trip_a, trip_b):
     ha_ab = float(trip_a[9]) + dist_ab
     hb_ba = float(trip_b[9]) + dist_ba
 
-    print("ha-hb {}".format(ha_hb))
-    print("ha-ab {}".format(ha_ab))
-    print("hb-ba {}".format(hb_ba))
+    # print("ha-hb {}".format(ha_hb))
+    # print("ha-ab {}".format(ha_ab))
+    # print("hb-ba {}".format(hb_ba))
 
 
     cur = conn.cursor()
@@ -107,7 +106,7 @@ def check(conn, trip_a, trip_b):
     #print trip_a
     #print trip_b
     q = "SELECT distance, ttime from delayconstraint where lat = " + lat + " and lon = " + lon
-    print q
+    # print q
     cur.execute(q)
     result = cur.fetchall()
     dist_ha_osrm = float(result[0][0]) * 0.00062137
@@ -118,56 +117,61 @@ def check(conn, trip_a, trip_b):
     lat = str(trip_b[2])
     lon = str(trip_b[3])
     q = "SELECT distance, ttime from delayconstraint where lat = " + lat + " and lon = " + lon
-    print q
+    # print q
     cur.execute(q)
     result = cur.fetchall()
     dist_hb_osrm = float(result[0][0]) * 0.00062137
     time_hb_osrm = float(result[0][1]) / 60.0
     speed_hb_osrm = dist_hb_osrm / time_hb_osrm
     speed_hb_ds = float(trip_b[26])
-    print speed_ha_osrm
-    print speed_ha_ds
+    # print speed_ha_osrm
+    # print speed_ha_ds
 
     speed_max_ab = max(speed_ab, speed_ba)
     factor = ((speed_ha_ds / speed_ha_osrm) + (speed_hb_ds / speed_hb_osrm)) / 2.0
 
-    print 'factor'
-    print(factor)
+    # print 'factor'
+    # print(factor)
     flag_ab = 0
     flag_ba = 0
     benefit_ab = 0
     benefit_ba = 0
-
+    arri_time_a = float(trip_a[28])
+    arri_time_b = float(trip_b[28])
 
     if ha_hb > ha_ab:
-        drop_time = float(trip_a[25]) + (dist_ab / (factor * speed_max_ab))
-        if drop_time <= float(trip_b[25]) + float(trip_b[14]):
+        drop_time = arri_time_a + (dist_ab / (factor * speed_max_ab))
+        if drop_time <= arri_time_b + delay_factor * arri_time_b:
             flag_ab = 1
-            benefit_ab = (ha_hb - ha_ab)/ha_hb
+            benefit_ab = (ha_hb - ha_ab) / ha_hb
 
-    print 'flag_ab'
-    print flag_ab
-    print 'benefit_ab'
-    print benefit_ab
+    # print 'flag_ab'
+    # print flag_ab
+    # print 'benefit_ab'
+    # print benefit_ab
 
     if ha_hb > hb_ba:
-        drop_time = float(trip_b[25]) + (dist_ba / (factor * speed_max_ab))
-        if drop_time <= float(trip_a[25]) + float(trip_a[14]):
+        drop_time = arri_time_b + (dist_ba / (factor * speed_max_ab))
+        if drop_time <= arri_time_a + delay_factor * arri_time_a:
             flag_ba = 1
-            benefit_ba = (ha_hb - hb_ba)/ha_hb
-    print 'flag_ba'
-    print flag_ba
-    print 'benefit_ba'
-    print benefit_ba
+            benefit_ba = (ha_hb - hb_ba) / ha_hb
+    # print 'flag_ba'
+    # print flag_ba
+    # print 'benefit_ba'
+    # print benefit_ba
     #if flag_ab == 1 and flag_ba == 1:
     benefit = max(benefit_ab, benefit_ba)
-    print 'final benefit'
-    print benefit
-    social_score = calc_social_score(trip_a, trip_b);
+
+    # print 'final benefit'
+    # print benefit
+    social_score = calc_social_score(trip_a, trip_b)[0];
+    # print type(social_score)
+
     #print 'social_score'
     #print social_score
     if(benefit !=0.0):
         G.add_edge(trip_a[0], trip_b[0], weight=10000*(benefit*2*.8) + social_score)
+        benefit_G.add_edge(trip_a[0], trip_b[0], weight=(benefit*ha_hb))
     #print 'graph'
     #print list(G.edges.items())
     #G.add_edge('100', '200', weight=1+benefit*.8)
@@ -176,12 +180,10 @@ def check(conn, trip_a, trip_b):
     #print list(G.edges.items())
     #if flag_ab == 1 and flag_ba == 0:
 
-
-
-"""
-Calculate the social score for trips a and b
-"""
 def calc_social_score(trip_a, trip_b):
+    """
+    Calculate the social score for trips a and b
+    """
     social_score = 0.0
     matched_a = 0
     matched_b = 0
@@ -211,93 +213,140 @@ def calc_social_score(trip_a, trip_b):
     if trip_b[24] == trip_a[23]:
         matched_b += 1
 
-    print matched_a, matched_b
+    # print matched_a, matched_b
 
     social_score = 0.1 * (matched_a / 5.0) + 0.1 * (matched_b / 5.0)
-    return social_score
+    return [social_score, matched_a, matched_b]
+    # return social_score, matched_a, matched_b
 
-def calculate_savings(trip_a, trip_b):
-    savings = 0
-    distance_a = float(trip_a[9])
-    distance_b = float(trip_b[9])
-    savings = abs(distance_a - distance_b)
-
-    return savings
+def calculate_savings(trip_a, trip_b, benefit_G):
+    return float(benefit_G[str(trip_a[0])][str(trip_b[0])]['weight'])
 
 
-"""
-Main function
-"""
 def main():
+    """
+    Main function
+    """
     conn = make_connection()
+
+    social_pref_count = [0, 0, 0, 0, 0, 0]
+
+    delay = 0.2
 
     all_trips = get_trips(conn)
     total_trips = len(all_trips)
-
     pools = get_pools(all_trips, total_trips, 5)
+    # print all_trips[0]
 
-    print all_trips[0]
-
-    pool =0
-
-    for i in range(len(pools[pool])):
-        for j in range(i+1, len(pools[pool])):
-            a = int(pools[pool][i]) - int(all_trips[0][0])
-            b = int(pools[pool][j]) - int(all_trips[0][0])
-            check(conn, all_trips[a], all_trips[b])
-
-    print 'length of pool'
-    print pools[pool], len(pools[pool])
-    #check(conn, all_trips[0], all_trips[1])
-    print 'graph'
-    print list(G.edges.items())
-
-    print 'max matching'
-
-    maximum_matching = list(nx.max_weight_matching(G, maxcardinality=True, weight='weight'))
-    print maximum_matching, len(maximum_matching)
+    # pool =0
+    # for i in range(len(pools[pool])):
+    #     for j in range(i+1, len(pools[pool])):
+    #         a = int(pools[pool][i]) - int(all_trips[0][0])
+    #         b = int(pools[pool][j]) - int(all_trips[0][0])
+    #         check(conn, all_trips[a], all_trips[b])
+    #
+    #
+    #
+    # print 'length of pool'
+    # print pools[pool], len(pools[pool])
+    # print 'graph'
+    # print list(G.edges.items())
+    #
+    # print 'max matching'
+    #
+    # maximum_matching = list(nx.max_weight_matching(G, maxcardinality=True, weight='weight'))
+    # print maximum_matching, len(maximum_matching)
+    #
+    # # print "benefit: "
+    # # print benefit_G['117060']['117059']['weight']
+    #
+    # distance_saved = 0.0
+    # total_combined_trips = len(maximum_matching)
+    # for i in range(total_combined_trips):
+    #     trip_a_id = int(maximum_matching[i][0]) - int(all_trips[0][0])
+    #     trip_b_id = int(maximum_matching[i][1]) - int(all_trips[0][0])
+    #     # print len(all_trips), trip_a_id, trip_b_id
+    #
+    #     trip_a = all_trips[trip_a_id]
+    #     trip_b = all_trips[trip_b_id]
+    #     distance_saved += calculate_savings(trip_a, trip_b)
+    #
+    # print "Total Savings"
+    # print distance_saved
+    #
+    # trips_saved = (total_combined_trips * 2)
+    # print "trips saved"
+    # print trips_saved
 
     distance_saved = 0.0
-    total_combined_trips = len(maximum_matching)
-    for i in range(total_combined_trips):
-        trip_a_id = int(maximum_matching[i][0]) - int(all_trips[0][0])
-        trip_b_id = int(maximum_matching[i][1]) - int(all_trips[0][0])
-        # print len(all_trips), trip_a_id, trip_b_id
+    trips_saved = 0
+    start_run_time = time.time()
 
-        trip_a = all_trips[trip_a_id]
-        trip_b = all_trips[trip_b_id]
-        distance_saved += calculate_savings(trip_a, trip_b)
+    for pool in range(len(pools)):
+        G = nx.Graph()
+        benefit_G = nx.Graph()
+        for i in range(len(pools[pool])):
+            for j in range(i + 1, len(pools[pool])):
+                # print pool
+                a = int(pools[pool][i]) - int(all_trips[0][0])
+                b = int(pools[pool][j]) - int(all_trips[0][0])
 
-    print "Total Savings"
-    print distance_saved
+                check(conn, all_trips[a], all_trips[b], G, benefit_G, delay)
 
-    trips_saved = (total_combined_trips * 2)
-    print "trips saved"
-    print trips_saved
+        maximum_matching = list(nx.max_weight_matching(G, maxcardinality=True, weight='weight'))
 
-    # distance_saved = 0.0
-    # trips_saved = 0
-    # for pool in range(len(pools)):
-    #     for i in range(len(pools[pool])):
-    #         for j in range(i, len(pools[pool])):
-    #             a = int(pools[pool][i]) - int(all_trips[0][0])
-    #             b = int(pools[pool][j]) - int(all_trips[0][0])
-    #
-    #             check(conn, all_trips[a], all_trips[b])
-    #             maximum_matching = list(nx.max_weight_matching(G, maxcardinality=True, weight='weight'))
-    #
-    #             # calculate distance and trips saved
-    #             total_combined_trips = len(maximum_matching)
-    #             for i in range(total_combined_trips):
-    #                 trip_a_id = int(maximum_matching[i][0]) - int(all_trips[0][0])
-    #                 trip_b_id = int(maximum_matching[i][1]) - int(all_trips[0][0])
-    #                 # print len(all_trips), trip_a_id, trip_b_id
-    #
-    #                 trip_a = all_trips[trip_a_id]
-    #                 trip_b = all_trips[trip_b_id]
-    #                 distance_saved += calculate_savings(trip_a, trip_b)
-    #
-    #             trips_saved += (total_combined_trips * 2)
+        # calculate distance and trips saved
+        total_combined_trips = len(maximum_matching)
+        print "combined: "
+        print total_combined_trips
+        trips_saved += (total_combined_trips * 2)
+        print "Trips Saved so far: %s" % trips_saved
+
+        for k in range(total_combined_trips):
+            trip_a_id = int(maximum_matching[k][0]) - int(all_trips[0][0])
+            trip_b_id = int(maximum_matching[k][1]) - int(all_trips[0][0])
+
+            trip_a = all_trips[trip_a_id]
+            trip_b = all_trips[trip_b_id]
+            distance_saved += calculate_savings(trip_a, trip_b, benefit_G)
+
+            ret = calc_social_score(trip_a, trip_b)
+            if ret[1] == 0:
+                social_pref_count[0] += 1
+            elif ret[1] == 1:
+                social_pref_count[1] += 1
+            elif ret[1] == 2:
+                social_pref_count[2] += 1
+            elif ret[1] == 3:
+                social_pref_count[3] += 1
+            elif ret[1] == 4:
+                social_pref_count[4] += 1
+            elif ret[1] == 5:
+                social_pref_count[5] += 1
+
+            if ret[2] == 0:
+                social_pref_count[0] += 1
+            elif ret[2] == 1:
+                social_pref_count[1] += 1
+            elif ret[2] == 2:
+                social_pref_count[2] += 1
+            elif ret[2] == 3:
+                social_pref_count[3] += 1
+            elif ret[2] == 4:
+                social_pref_count[4] += 1
+            elif ret[2] == 5:
+                social_pref_count[5] += 1
+
+
+    print "Total Trips: ", len(all_trips)
+    print "trips saved: ", trips_saved
+
+    print "Percentage trips saved: %s" % ((trips_saved / float(len(all_trips))) * 100)
+
+    print "Total Savings", distance_saved
+
+    print "Social Preferences: ", social_pref_count
+    print "Running time of pooling: %s" % (time.time() - start_run_time)
 
     conn.close()
 
