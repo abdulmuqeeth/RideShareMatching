@@ -234,8 +234,7 @@ def main():
     trips_saved = 0
     start_run_time = time.time()
 
-    # for pool in range(len(pools)):
-    for pool in range(1):
+    for pool in range(250):
         G = nx.Graph()
         benefit_G = nx.Graph()
         for i in range(len(pools[pool])):
@@ -244,7 +243,7 @@ def main():
                 a = int(pools[pool][i]) - int(all_trips[0][0])
                 b = int(pools[pool][j]) - int(all_trips[0][0])
 
-                check(conn, all_trips[a], all_trips[b], G, benefit_G, delay, False)
+                check(conn, all_trips[a], all_trips[b], G, benefit_G, delay)
 
         maximum_matching = list(nx.max_weight_matching(G, maxcardinality=True, weight='weight'))
 
