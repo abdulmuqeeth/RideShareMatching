@@ -24,7 +24,7 @@ def get_trips(conn):
     Load data from preprocessed .csv files
     """
     cur = conn.cursor()
-    cur.execute("SELECT * FROM trips WHERE stdate='1/23/16'")
+    cur.execute("SELECT * FROM trips WHERE stdate='1/1/16'")
     return cur.fetchall()
 
 def get_pools(all_trips, total_trips, pool_size):
@@ -58,7 +58,7 @@ def get_pools(all_trips, total_trips, pool_size):
     return pools
 
 
-def check(conn, trip_a, trip_b, G, benefit_G, delay_factor):
+def check(conn, trip_a, trip_b, G, benefit_G, delay_factor, callApi=True):
     """
     Perform distance and delay constraint checks for trips a and b
     """
@@ -74,24 +74,55 @@ def check(conn, trip_a, trip_b, G, benefit_G, delay_factor):
 
         return
 
+    # print "Flag: %s" % callApi
 
-    url_ab = "http://router.project-osrm.org/route/v1/driving/" + str(trip_a[3]) + "," + str(trip_a[2]) + ";" + str(trip_b[3]) + "," + str(trip_b[2]) + "?annotations=distance"
-    response  = requests.get(url_ab).text
-    json_response = json.loads(response)
-    dist_ab = json_response["routes"][0]["distance"] * 0.00062137
-    time_ab = json_response["routes"][0]["duration"] / 60.0
-    speed_ab = dist_ab / time_ab
+    if callApi:
+        url_ab = "http://router.project-osrm.org/route/v1/driving/" + str(trip_a[3]) + "," + str(trip_a[2]) + ";" + str(trip_b[3]) + "," + str(trip_b[2]) + "?annotations=distance"
+        response  = requests.get(url_ab).text
+        json_response = json.loads(response)
+        dist_ab = json_response["routes"][0]["distance"] * 0.00062137
+        time_ab = json_response["routes"][0]["duration"] / 60.0
+        speed_ab = dist_ab / time_ab
 
-    url_ba = "http://router.project-osrm.org/route/v1/driving/" + str(trip_b[3]) + "," + str(trip_b[2]) + ";" + str(trip_a[3]) + "," + str(trip_a[2]) + "?annotations=distance"
-    response  = requests.get(url_ab).text
-    json_response = json.loads(response)
-    dist_ba = json_response["routes"][0]["distance"] * 0.00062137
-    time_ba = json_response["routes"][0]["duration"] / 60.0
-    speed_ba = dist_ba / time_ba
+        url_ba = "http://router.project-osrm.org/route/v1/driving/" + str(trip_b[3]) + "," + str(trip_b[2]) + ";" + str(trip_a[3]) + "," + str(trip_a[2]) + "?annotations=distance"
+        response  = requests.get(url_ba).text
+        json_response = json.loads(response)
+        dist_ba = json_response["routes"][0]["distance"] * 0.00062137
+        time_ba = json_response["routes"][0]["duration"] / 60.0
+        speed_ba = dist_ba / time_ba
 
-    ha_hb = float(trip_a[9]) + float(trip_b[9])
-    ha_ab = float(trip_a[9]) + dist_ab
-    hb_ba = float(trip_b[9]) + dist_ba
+        ha_hb = float(trip_a[9]) + float(trip_b[9])
+        ha_ab = float(trip_a[9]) + dist_ab
+        hb_ba = float(trip_b[9]) + dist_ba
+    else:
+        cur = conn.cursor()
+        q = "SELECT distance, duration from lookup WHERE trip_a_id=" + trip_a[1] + " and trip_b_id=" + trip_b[1]
+        # print q
+        cur.execute(q)
+
+        result = cur.fetchall()
+        # print "ab"
+        # print result
+        ha_hb = float(trip_a[9]) + float(trip_b[9])
+        dist_ab = float(result[0][0])
+        print "ab"
+        print dist_ab
+        time_ab = float(result[0][1]) / 60.0
+        ha_ab = float(trip_a[9]) + dist_ab
+        speed_ab = dist_ab / time_ab
+
+        cur = conn.cursor()
+        q = "SELECT distance, duration from lookup WHERE trip_a_id=" + trip_b[1] + " and trip_b_id=" + trip_a[1]
+        cur.execute(q)
+        result = cur.fetchall()
+        # print "ba"
+        # print result
+        dist_ba = float(result[0][0])
+        print "ba"
+        print dist_ba
+        time_ba = float(result[0][1]) / 60.0
+        hb_ba = float(trip_b[9]) + dist_ba
+        speed_ba = dist_ba / time_ba
 
     cur = conn.cursor()
     lat = str(trip_a[2])
@@ -203,7 +234,8 @@ def main():
     trips_saved = 0
     start_run_time = time.time()
 
-    for pool in range(len(pools)):
+    # for pool in range(len(pools)):
+    for pool in range(1):
         G = nx.Graph()
         benefit_G = nx.Graph()
         for i in range(len(pools[pool])):
@@ -212,7 +244,7 @@ def main():
                 a = int(pools[pool][i]) - int(all_trips[0][0])
                 b = int(pools[pool][j]) - int(all_trips[0][0])
 
-                check(conn, all_trips[a], all_trips[b], G, benefit_G, delay)
+                check(conn, all_trips[a], all_trips[b], G, benefit_G, delay, False)
 
         maximum_matching = list(nx.max_weight_matching(G, maxcardinality=True, weight='weight'))
 
@@ -258,7 +290,7 @@ def main():
             elif ret[2] == 5:
                 social_pref_count[5] += 1
 
-
+    print "Pool #", pool
     print "Total Trips: ", len(all_trips)
     print "trips saved: ", trips_saved
 
