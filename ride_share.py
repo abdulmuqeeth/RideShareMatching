@@ -105,8 +105,8 @@ def check(conn, trip_a, trip_b, G, benefit_G, delay_factor, callApi=True):
         # print result
         ha_hb = float(trip_a[9]) + float(trip_b[9])
         dist_ab = float(result[0][0])
-        print "ab"
-        print dist_ab
+        # print "ab"
+        # print dist_ab
         time_ab = float(result[0][1]) / 60.0
         ha_ab = float(trip_a[9]) + dist_ab
         speed_ab = dist_ab / time_ab
@@ -118,8 +118,8 @@ def check(conn, trip_a, trip_b, G, benefit_G, delay_factor, callApi=True):
         # print "ba"
         # print result
         dist_ba = float(result[0][0])
-        print "ba"
-        print dist_ba
+        # print "ba"
+        # print dist_ba
         time_ba = float(result[0][1]) / 60.0
         hb_ba = float(trip_b[9]) + dist_ba
         speed_ba = dist_ba / time_ba
