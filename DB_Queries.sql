@@ -55,5 +55,22 @@ ENCLOSED BY '"'
 LINES TERMINATED BY '\n'
 IGNORE 0 ROWS;
 
+CREATE TABLE `lookup` (
+  `trip_a_id` int(11) DEFAULT NULL,
+  `trip_b_id` int(11) DEFAULT NULL,
+  `lat` decimal(6,4) DEFAULT NULL,
+  `lng` decimal(6,4) DEFAULT NULL,
+  `distance` varchar(10) DEFAULT NULL,
+  `duration` varchar(7) DEFAULT NULL,
+  KEY `IX_int` (`trip_a_id`,`trip_b_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8
+
+LOAD DATA LOCAL INFILE '/Users/sndpkiran/Downloads/final_int_int.csv' 
+INTO TABLE lookup
+FIELDS TERMINATED BY ',' 
+ENCLOSED BY '"' 
+LINES TERMINATED BY '\n' 
+IGNORE 0 ROWS;
+
 
 
