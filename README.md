@@ -1,4 +1,5 @@
 RIDE SHARING
+
 This project evaluates ride-sharing algorithms on spatio-temporal data. The orginal dataset is obtained from NYC government website. The orginal dataset consisted of nearly 9 million trips in New York City, which is cut down to 157.3 thousand after cleaning the dataset considering various assumptions. 
 
 The ojective of this project is to merge trips that maximizes the total benefit (includes social preferences and distance saved). 
