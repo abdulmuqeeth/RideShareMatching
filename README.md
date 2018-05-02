@@ -46,5 +46,3 @@ to
 > **Default parameters:**  
 > Delay: 20%(Trip duration)   
 > Pool size: 5 minutes  
-               
-
