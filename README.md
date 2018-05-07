@@ -33,7 +33,7 @@ Orginal Dataset: http://www.nyc.gov/html/tlc/html/about/trip_record_data.shtml
 
 To Run using the precomputed intersection to intersection data
 
-1. Import `final_int_int.csv` into the database.
+1. Import [final_int_int.csv](https://drive.google.com/open?id=19Qo-FHA3MDMb6zfMZ_ThQmadxa4mVziL) into the database.
 2. Make following change in `ride_share.py`
  At line #246 change  
 ```check(conn, all_trips[a], all_trips[b], G, benefit_G, delay)```  
